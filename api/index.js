@@ -1,0 +1,14 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
+const connectDB = require('../server/config/db');
+const app = require('../server/app');
+
+module.exports = async (req, res) => {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('[Vercel Serverless API] DB connection error:', err.message);
+  }
+  return app(req, res);
+};

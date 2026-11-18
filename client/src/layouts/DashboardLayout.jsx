@@ -17,40 +17,72 @@ const DashboardLayout = () => {
   const [activeCallId, setActiveCallId] = useState(null);
 
   useEffect(() => {
-    if (!socket) return;
+    let pollInterval = null;
 
-    const handleIncoming = (data) => {
-      console.log('[DashboardLayout] Received call:incoming:', data);
-      setIncomingCall(data);
-    };
-
-    const handleBroadcast = (data) => {
-      const myEmail = (user?.email || '').toLowerCase().trim();
-      const myId = (user?.id || user?._id || '').toString();
-      if (
-        (data.targetEmail && data.targetEmail === myEmail) ||
-        (data.targetUserId && data.targetUserId === myId)
-      ) {
-        console.log('[DashboardLayout] Received matching call:incoming_broadcast:', data);
+    if (socket) {
+      const handleIncoming = (data) => {
+        console.log('[DashboardLayout] Received call:incoming:', data);
         setIncomingCall(data);
-      }
-    };
+      };
 
-    const handleCallEnded = (data) => {
-      if (incomingCall && data.callId === incomingCall.callId) {
-        setIncomingCall(null);
-      }
-    };
+      const handleBroadcast = (data) => {
+        const myEmail = (user?.email || '').toLowerCase().trim();
+        const myId = (user?.id || user?._id || '').toString();
+        if (
+          (data.targetEmail && data.targetEmail === myEmail) ||
+          (data.targetUserId && data.targetUserId === myId)
+        ) {
+          console.log('[DashboardLayout] Received matching call:incoming_broadcast:', data);
+          setIncomingCall(data);
+        }
+      };
 
-    socket.on('call:incoming', handleIncoming);
-    socket.on('call:incoming_broadcast', handleBroadcast);
-    socket.on('call:ended', handleCallEnded);
+      const handleCallEnded = (data) => {
+        if (incomingCall && data.callId === incomingCall.callId) {
+          setIncomingCall(null);
+        }
+      };
 
-    return () => {
-      socket.off('call:incoming', handleIncoming);
-      socket.off('call:incoming_broadcast', handleBroadcast);
-      socket.off('call:ended', handleCallEnded);
-    };
+      socket.on('call:incoming', handleIncoming);
+      socket.on('call:incoming_broadcast', handleBroadcast);
+      socket.on('call:ended', handleCallEnded);
+
+      return () => {
+        socket.off('call:incoming', handleIncoming);
+        socket.off('call:incoming_broadcast', handleBroadcast);
+        socket.off('call:ended', handleCallEnded);
+      };
+    } else {
+      // Periodic check for incoming calls if WebSocket is disconnected
+      const checkIncomingCalls = async () => {
+        try {
+          const res = await api.get('/calls?status=Ringing&limit=1');
+          if (res.data?.calls?.length > 0) {
+            const ringing = res.data.calls[0];
+            const myEmail = (user?.email || '').toLowerCase().trim();
+            const myId = (user?.id || user?._id || '').toString();
+            if (
+              ringing.recipientUserId === myId ||
+              (ringing.recipientEmail && ringing.recipientEmail.toLowerCase().trim() === myEmail)
+            ) {
+              setIncomingCall({
+                callId: ringing._id,
+                callerName: ringing.callerName || 'TalkPilot AI Agent',
+                campaignName: ringing.campaignId?.name || 'Inbound Session',
+                agentName: ringing.agentId?.name || 'Voice Assistant'
+              });
+            }
+          }
+        } catch (e) {
+          // ignore background poll errors
+        }
+      };
+
+      pollInterval = setInterval(checkIncomingCalls, 10000);
+      return () => {
+        if (pollInterval) clearInterval(pollInterval);
+      };
+    }
   }, [socket, user, incomingCall]);
 
   const handleAcceptCall = async (callId) => {

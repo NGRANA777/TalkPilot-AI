@@ -157,9 +157,11 @@ const LiveCallModal = ({ callId, onClose }) => {
 
   const suggestionChips = getSuggestionChips();
 
-  // Fetch initial call info
+  // Fetch initial call info and poll updates if WebSocket is disconnected
   useEffect(() => {
     let isSubscribed = true;
+    let pollInterval = null;
+
     const fetchCall = async () => {
       try {
         const res = await api.get(`/calls/${callId}`);
@@ -180,16 +182,33 @@ const LiveCallModal = ({ callId, onClose }) => {
             );
             return [...prev, ...toAdd];
           });
+
+          // Stop polling if call reached terminal state
+          const terminalStates = ['Completed', 'Failed', 'Cancelled', 'Busy', 'No Answer'];
+          if (terminalStates.includes(res.data.call.status) && pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+          }
         }
       } catch (err) {
         console.error('Error fetching live call info:', err);
       }
     };
-    if (callId) fetchCall();
+
+    if (callId) {
+      fetchCall();
+
+      // If socket is disconnected, poll to stream updates
+      if (!socket || !socket.connected) {
+        pollInterval = setInterval(fetchCall, 2500);
+      }
+    }
+
     return () => {
       isSubscribed = false;
+      if (pollInterval) clearInterval(pollInterval);
     };
-  }, [callId]);
+  }, [callId, socket]);
 
   // Duration Timer
   useEffect(() => {
