@@ -9,15 +9,15 @@ const resolveSocketUrl = () => {
   if (process.env.REACT_APP_SERVER_URL) {
     return process.env.REACT_APP_SERVER_URL;
   }
-  // In production environments (like Vercel), if no explicit persistent server URL is provided,
-  // we do not attempt to connect to localhost:5000.
+  // On Vercel (or any production domain), connect to window.location.origin
+  // Top-level vercel.json rewrites route /socket.io/* directly to the server service
   if (
     typeof window !== 'undefined' &&
     window.location &&
     window.location.hostname !== 'localhost' &&
     window.location.hostname !== '127.0.0.1'
   ) {
-    return null;
+    return window.location.origin;
   }
   return 'http://localhost:5000';
 };
@@ -35,14 +35,18 @@ export const SocketProvider = ({ children }) => {
 
     if (userId && serverUrl) {
       try {
+        // Vercel native WebSockets require direct 'websocket' transport to bypass HTTP long-polling handshakes
         const newSocket = io(serverUrl, {
-          transports: ['websocket', 'polling'],
-          reconnectionAttempts: 5,
-          timeout: 6000
+          transports: ['websocket'],
+          reconnection: true,
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 10000
         });
 
         newSocket.on('connect', () => {
-          console.log('[SocketContext] Connected to Socket.IO server:', newSocket.id);
+          console.log('[SocketContext] Connected to Socket.IO server via WebSocket:', newSocket.id);
           newSocket.emit('join:user', {
             userId,
             email: userEmail
@@ -50,7 +54,7 @@ export const SocketProvider = ({ children }) => {
         });
 
         newSocket.on('connect_error', (err) => {
-          console.warn('[SocketContext] WebSocket unavailable, operating via REST APIs:', err.message);
+          console.warn('[SocketContext] WebSocket connection warning (falling back to REST endpoints if needed):', err.message);
         });
 
         socketRef.current = newSocket;

@@ -9,17 +9,22 @@ dotenv.config();
 
 const server = http.createServer(app);
 
-// Initialize Socket.IO
+// Initialize Socket.IO with WebSocket transport support
 const io = new Server(server, {
   cors: {
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
-  }
+  },
+  transports: ['websocket', 'polling']
 });
 
-// Save io instance to app
+// Attach instances
 app.set('io', io);
+app.io = io;
+app.server = server;
+server.app = app;
+server.io = io;
 
 // Connect to MongoDB
 connectDB();
@@ -107,13 +112,16 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(` TalkPilot AI Server running on port ${PORT}`);
-  console.log(` Mode: ${process.env.NODE_ENV || 'development'}`);
-  console.log(` Calling Mode: ${process.env.CALLING_MODE || 'mock'}`);
-  console.log(`=======================================================`);
-});
+// Start persistent server when run directly (local development or persistent hosts like Render)
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  const PORT = process.env.PORT || 5000;
+  server.listen(PORT, () => {
+    console.log(`=======================================================`);
+    console.log(` TalkPilot AI Server running on port ${PORT}`);
+    console.log(` Mode: ${process.env.NODE_ENV || 'development'}`);
+    console.log(` Calling Mode: ${process.env.CALLING_MODE || 'mock'}`);
+    console.log(`=======================================================`);
+  });
+}
 
-module.exports = { app, server, io };
+module.exports = server;
