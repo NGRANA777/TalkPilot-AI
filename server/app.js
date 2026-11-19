@@ -7,6 +7,11 @@ const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
+// Configure Express proxy trust for Vercel's reverse proxy environment (1 hop).
+// Placed immediately after Express initialization to ensure express-rate-limit and Express
+// accurately determine client IP from X-Forwarded-For and resolve ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 // Security Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 
